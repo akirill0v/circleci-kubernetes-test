@@ -1,0 +1,73 @@
+aliases:
+  - &build_environment
+    working_directory: ~/data
+    executor: build-executor
+
+  - &attach_workspace
+    attach_workspace:
+      at: ~/data
+
+  - &repo-defaults
+    repo: circleci-test-cluster
+    tag: "${CIRCLE_SHA1}"
+
+  - &build_steps
+    - aws-ecr/ecr-login
+    - unless:
+        condition: << parameters.production >>
+        steps:
+          - aws-ecr/build-and-push-image:
+              <<: *repo-defaults
+              tag: "${CIRCLE_SHA1}"
+          - aws-ecr/build-and-push-image:
+              <<: *repo-defaults
+              tag: << parameters.tag >>
+    - when:
+        condition: << parameters.production >>
+        steps:
+          - aws-ecr/build-and-push-image:
+              <<: *repo-defaults
+              tag: << parameters.tag >>
+
+  - &prod_filters
+    branches:
+      only:
+        - master
+
+  - &stage_filters
+    branches:
+      only:
+        - migrate-to-circleci
+
+version: 2.1
+orbs:
+  aws-ecr: circleci/aws-ecr@6.1.0
+executors:
+  build-executor:
+    machine: true
+
+workflows:
+  version: 2
+  master:
+    jobs:
+      - "Build docker image":
+          production: false
+          filters:
+            <<: *stage_filters
+      - "Build docker image":
+          production: true
+          tag: "${CIRCLE_BUILD_NUM}"
+          filters:
+            <<: *prod_filters
+
+jobs:
+  "Build docker image":
+    <<: *build_environment
+    parameters:
+      production:
+        type: boolean
+        default: false
+      tag:
+        type: string
+        default: "latest"
+    steps: *build_steps
