@@ -11,23 +11,39 @@ aliases:
     repo: circleci-test-cluster
     tag: "${CIRCLE_SHA1}"
 
+  - &props-image-sha1
+    <<: *repo-defaults
+    tag: "${CIRCLE_SHA1}"
+
+  - &props-image-tag
+    <<: *repo-defaults
+    tag: << parameters.tag >>
+
   - &build_steps
+    - aws-cli/install
+    - aws-cli/configure
     - aws-ecr/ecr-login
+    - checkout
     - unless:
         condition: << parameters.production >>
         steps:
-          - aws-ecr/build-and-push-image:
-              <<: *repo-defaults
-              tag: "${CIRCLE_SHA1}"
-          - aws-ecr/build-and-push-image:
-              <<: *repo-defaults
-              tag: << parameters.tag >>
+          - aws-ecr/build-image:
+              <<: *props-image-sha1
+          - aws-ecr/push-image:
+              <<: *props-image-sha1
+          - aws-ecr/build-image:
+              <<: *props-image-tag
+          - aws-ecr/push-image:
+              <<: *props-image-tag
     - when:
         condition: << parameters.production >>
         steps:
-          - aws-ecr/build-and-push-image:
-              <<: *repo-defaults
-              tag: << parameters.tag >>
+          - aws-ecr/build-image:
+              <<: *props-image-tag
+              tag: "$(cat VERSION.txt)"
+          - aws-ecr/push-image:
+              <<: *props-image-tag
+              tag: "$(cat VERSION.txt)"
 
   - &prod_filters
     branches:
@@ -41,6 +57,7 @@ aliases:
 
 version: 2.1
 orbs:
+  aws-cli: circleci/aws-cli@0.1.13
   aws-ecr: circleci/aws-ecr@6.1.0
 executors:
   build-executor:
@@ -56,7 +73,6 @@ workflows:
             <<: *stage_filters
       - "Build docker image":
           production: true
-          tag: "$(cat VERSION.txt)"
           filters:
             <<: *prod_filters
 
