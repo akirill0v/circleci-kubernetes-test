@@ -19,6 +19,14 @@ aliases:
     <<: *repo-defaults
     tag: << parameters.tag >>
 
+  - &props-shared-parameters
+    production:
+      type: boolean
+      default: false
+    tag:
+      type: string
+      default: "latest"
+
   - &build_steps
     - aws-cli/install
     - aws-cli/configure
@@ -53,8 +61,20 @@ aliases:
           echo $KUBECONFIG_BASE64 | base64 -d | xargs -0 echo > ~/.kube/config
     - helm/install-helm-client:
         version: "v2.11.0"
-    - run: |
-        helm --kubeconfig ~/.kube/config ls
+    - when:
+        condition: << parameters.production >>
+        steps:
+          - helm/install-helm-chart:
+              values-to-override: "image.tag=${CIRCLE_SHA1}"
+              chart: .helm/
+              release-name: app
+    - unless:
+        condition: << parameters.production >>
+        steps:
+          - helm/install-helm-chart:
+              values-to-override: "image.tag=$(cat VERSION.txt)"
+              chart: .helm/
+              release-name: app
 
   - &prod_filters
     branches:
@@ -90,6 +110,13 @@ workflows:
           filters:
             <<: *prod_filters
       - "Deploy helm charts":
+          name: "Deploy staging chart"
+          requires:
+            - "Build staging image"
+          filters:
+            <<: *stage_filters
+      - "Deploy helm charts":
+          name: "Deploy production chart"
           requires:
             - "Build production image"
           filters:
@@ -98,14 +125,9 @@ workflows:
 jobs:
   "Build docker image":
     <<: *build_environment
+    parameters: *props-shared-parameters
     steps: *build_steps
-    parameters:
-      production:
-        type: boolean
-        default: false
-      tag:
-        type: string
-        default: "latest"
   "Deploy helm charts":
     <<: *build_environment
+    parameters: *props-shared-parameters
     steps: *deploy_helm_chart_steps
