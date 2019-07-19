@@ -56,7 +56,7 @@ workflows:
             <<: *stage_filters
       - "Build docker image":
           production: true
-          tag: "${CIRCLE_BUILD_NUM}"
+          tag: "$(cat VERSION.txt)"
           filters:
             <<: *prod_filters
 
