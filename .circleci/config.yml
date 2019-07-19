@@ -11,23 +11,50 @@ aliases:
     repo: circleci-test-cluster
     tag: "${CIRCLE_SHA1}"
 
+  - &props-image-sha1
+    <<: *repo-defaults
+    tag: "${CIRCLE_SHA1}"
+
+  - &props-image-tag
+    <<: *repo-defaults
+    tag: << parameters.tag >>
+
   - &build_steps
+    - aws-cli/install
+    - aws-cli/configure
     - aws-ecr/ecr-login
+    - checkout
     - unless:
         condition: << parameters.production >>
         steps:
-          - aws-ecr/build-and-push-image:
-              <<: *repo-defaults
-              tag: "${CIRCLE_SHA1}"
-          - aws-ecr/build-and-push-image:
-              <<: *repo-defaults
-              tag: << parameters.tag >>
+          - aws-ecr/build-image:
+              <<: *props-image-sha1
+          - aws-ecr/push-image:
+              <<: *props-image-sha1
+          - aws-ecr/build-image:
+              <<: *props-image-tag
+          - aws-ecr/push-image:
+              <<: *props-image-tag
     - when:
         condition: << parameters.production >>
         steps:
-          - aws-ecr/build-and-push-image:
-              <<: *repo-defaults
-              tag: << parameters.tag >>
+          - aws-ecr/build-image:
+              <<: *props-image-tag
+              tag: "$(cat VERSION.txt)"
+          - aws-ecr/push-image:
+              <<: *props-image-tag
+              tag: "$(cat VERSION.txt)"
+
+  - &deploy_helm_chart_steps
+    - checkout
+    - run:
+        command: |
+          mkdir ~/.kube/ && \
+          echo $KUBECONFIG_BASE64 | base64 -d | xargs -0 echo > ~/.kube/config
+    - helm/install-helm-client:
+        version: "v2.11.0"
+    - run: |
+        helm --kubeconfig ~/.kube/config ls
 
   - &prod_filters
     branches:
@@ -41,7 +68,9 @@ aliases:
 
 version: 2.1
 orbs:
+  aws-cli: circleci/aws-cli@0.1.13
   aws-ecr: circleci/aws-ecr@6.1.0
+  helm: circleci/helm@0.1.2
 executors:
   build-executor:
     machine: true
@@ -51,18 +80,25 @@ workflows:
   master:
     jobs:
       - "Build docker image":
+          name: "Build staging image"
           production: false
           filters:
             <<: *stage_filters
       - "Build docker image":
+          name: "Build production image"
           production: true
-          tag: "$(cat VERSION.txt)"
+          filters:
+            <<: *prod_filters
+      - "Deploy helm charts":
+          requires:
+            - "Build production image"
           filters:
             <<: *prod_filters
 
 jobs:
   "Build docker image":
     <<: *build_environment
+    steps: *build_steps
     parameters:
       production:
         type: boolean
@@ -70,4 +106,6 @@ jobs:
       tag:
         type: string
         default: "latest"
-    steps: *build_steps
+  "Deploy helm charts":
+    <<: *build_environment
+    steps: *deploy_helm_chart_steps
