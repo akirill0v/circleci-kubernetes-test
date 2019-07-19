@@ -15,10 +15,6 @@ aliases:
     attach_workspace:
       at: ~/data
 
-  - &helm-install-chart
-    command: |
-      helm upgrade app --install --set image.tag=<< parameters.tag >> --wait .helm/
-
   - &deploy_helm_chart_steps
     - checkout
     - deploy_helm_chart:
@@ -37,7 +33,7 @@ aliases:
   - &stage_filters
     branches:
       only:
-        - migrate-to-circleci
+        - staging
 
 commands:
   bulid_and_push_docker_image_dockerhub:
