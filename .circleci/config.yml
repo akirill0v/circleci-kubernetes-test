@@ -118,11 +118,18 @@ workflows:
             - "Build staging image"
           filters:
             <<: *stage_filters
+      - hold:
+          type: approval
+          name: "Approve for start production deployment"
+          requires:
+            - "Build production image"
+          filters:
+            <<: *prod_filters
       - "Deploy helm charts":
           name: "Deploy production chart"
           tag: "$(cat VERSION.txt)"
           requires:
-            - "Build production image"
+            - "Approve for start production deployment"
           filters:
             <<: *prod_filters
 
