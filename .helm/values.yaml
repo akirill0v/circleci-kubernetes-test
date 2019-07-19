@@ -6,6 +6,7 @@ replicaCount: 1
 name: app
 
 image:
+  # repository: 324496106481.dkr.ecr.us-east-2.amazonaws.com/circleci-test-cluster
   repository: saratovsource/circleci-test-cluster
   tag: latest
   pullPolicy: IfNotPresent
